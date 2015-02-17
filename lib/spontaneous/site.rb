@@ -92,11 +92,19 @@ module Spontaneous
     end
 
     def db_settings
-      self.config.db = db_config[environment]
+      self.config.db ||= db_connection_options
     end
 
-    def db_config
-      @db_config ||= YAML.load_file(File.join(paths.expanded(:config).first, "database.yml"))
+    def db_connection_options
+      @db_connection_options ||= db_config_env || db_config_file[environment]
+    end
+
+    def db_config_env
+      ENV['DATABASE_URL']
+    end
+
+    def db_config_file
+      YAML.load_file(File.join(paths.expanded(:config).first, "database.yml"))
     end
 
     def transaction(&block)
