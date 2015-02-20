@@ -51,7 +51,9 @@ module Spontaneous::Field
     end
 
     def sizes
-      @sizes ||= Hash.new { |hash, key| hash[key] = S::Media::Image::Attributes.new(processed_values[key]) }
+      @sizes ||= Hash.new { |hash, key|
+        hash[key] = S::Media::Image::Attributes.new(site, processed_values[key])
+      }
     end
 
     # value used to show conflicts between the current value and the value they're attempting to enter

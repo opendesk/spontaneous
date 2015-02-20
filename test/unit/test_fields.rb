@@ -784,6 +784,7 @@ describe "Fields" do
           :version => 1,
           :value => {
             :width=>50, :height=>67, :dimensions => [50,67], :filesize=>3951,
+            :storage_name=>"default",
             :type=>"image/gif", :format => "gif",
             :tempfile=>"#{@site.root}/cache/media/tmp/#{field.media_id}/something.gif",
           :filename=>"something.gif",
@@ -810,6 +811,7 @@ describe "Fields" do
           :version => 1,
           :value => {
             :width=>50, :height=>67, :dimensions => [50,67], :filesize=>3951,
+            :storage_name=>"default",
             :type=>"image/gif", :format => "gif",
             :tempfile=>"#{@site.root}/cache/media/tmp/#{field.media_id}/something.gif",
           :filename=>"something.gif",
@@ -855,6 +857,7 @@ describe "Fields" do
           :version => 1,
           :value => {
             :width=>50, :height=>67, :dimensions => [50,67], :filesize=>3951,
+            :storage_name=>"default",
             :type=>"image/gif", :format => "gif",
             :tempfile=>"#{@site.root}/cache/media/tmp/#{field.media_id}/something.gif",
           :filename=>"something.gif",
@@ -879,6 +882,7 @@ describe "Fields" do
           :version => 1,
           :value => {
             :width=>50, :height=>67, :dimensions => [50,67], :filesize=>3951,
+            :storage_name=>"default",
             :type=>"image/gif", :format => "gif",
             :tempfile=>"#{@site.root}/cache/media/tmp/#{field.media_id}/something.gif",
           :filename=>"something.gif",

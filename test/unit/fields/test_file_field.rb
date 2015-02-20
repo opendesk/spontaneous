@@ -110,6 +110,31 @@ describe "File Fields" do
     @field.original_filename.must_equal "/images/nosuchfile.rtf"
   end
 
+  it "sets the storage name if given an uploaded file" do
+    @field.value = path
+    @field.storage_name.must_equal "default"
+  end
+
+  it "sets the storage name if given an uploaded file" do
+    @field.value = path
+    @field.storage.must_equal @site.storage
+  end
+
+  it "sets the storage name to nil for file paths" do
+    @field.value = "/images/nosuchfile.rtf"
+    @field.storage_name.must_equal nil
+  end
+
+  it "allows for re-configuring the generated media URLs" do
+    @field.value = path
+    @field.path.must_match %r{^/media/.+/vimlogo.pdf$}
+    storage = @site.storage("default")
+    storage.url_mapper = ->(path) { "http://media.example.com#{path}"}
+    @field.value(:html).must_match %r{^http://media.example.com/media/.+/vimlogo.pdf$}
+    @field.path.must_match %r{^http://media.example.com/media/.+/vimlogo.pdf$}
+    @field.url.must_match %r{^http://media.example.com/media/.+/vimlogo.pdf$}
+  end
+
   describe "clearing" do
     def assert_file_field_empty
       @field.value.must_equal ''
@@ -131,13 +156,15 @@ describe "File Fields" do
   describe "with cloud storage" do
     before do
       ::Fog.mock!
-      @aws_credentials = {
-        :provider=>"AWS",
-        :aws_secret_access_key=>"SECRET_ACCESS_KEY",
-        :aws_access_key_id=>"ACCESS_KEY_ID"
+      @storage_config = {
+        provider: "AWS",
+        aws_secret_access_key: "SECRET_ACCESS_KEY",
+        aws_access_key_id: "ACCESS_KEY_ID",
+        public_host: 'https://media.example.com'
       }
-      @storage = S::Media::Store::Cloud.new(@aws_credentials, "media.example.com")
-      @site.expects(:storage).returns(@storage)
+      @storage = S::Media::Store::Cloud.new("S3", @storage_config, "media.example.com")
+      @storage.name.must_equal "S3"
+      @site.storage_backends.unshift(@storage)
     end
 
     it "sets the content-disposition header if defined as an 'attachment'" do
@@ -146,6 +173,26 @@ describe "File Fields" do
       path = File.expand_path("../../../fixtures/images/vimlogo.pdf", __FILE__)
       @storage.expects(:copy).with(path, is_a(Array), { content_type: "application/pdf", content_disposition: 'attachment; filename=vimlogo.pdf'})
       field.value = path
+    end
+
+    describe 'storage' do
+      before do
+        @prototype = @content_class.field :attachment, :file
+        @field = @instance.attachment
+        @storage.stubs(:copy).with(path, is_a(Array), { content_type: "application/pdf"})
+      end
+
+      it "sets the storage name if given an uploaded file" do
+        @field.value = path
+        @field.storage_name.must_equal "S3"
+      end
+
+      it "allows for the file url to be configured by the storage" do
+        @field.value = path
+        @field.url.must_match %r[^https://media.example.com/0000#{@instance.id}/0001/vimlogo.pdf$]
+        @storage.url_mapper = ->(path) { "https://cdn.example.com#{path}" }
+        @field.url.must_match %r[^https://cdn.example.com/0000#{@instance.id}/0001/vimlogo.pdf$]
+      end
     end
   end
 end
