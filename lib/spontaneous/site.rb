@@ -84,23 +84,23 @@ module Spontaneous
 
 
     def connect_to_database!
-      db = database_instance
+      db = database_instance(db_settings)
       db.logger = logger if config.log_queries
       # Improve performance for postgres
       db.optimize_model_load = true if db.respond_to?(:optimize_model_load)
       self.database = db
     end
 
-    def database_instance
-      Sequel.connect(db_settings)
+    def database_instance(opts)
+      Sequel.connect(opts)
     end
 
     def db_settings
-      self.config.db ||= db_connection_options
+      self.config.db ||= db_connection_options(environment)
     end
 
-    def db_connection_options
-      @db_connection_options ||= db_config_env || db_config_file[environment]
+    def db_connection_options(env)
+      (db_config_env || db_config_file[env])
     end
 
     def db_config_env
