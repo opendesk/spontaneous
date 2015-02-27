@@ -84,11 +84,11 @@ module Spontaneous
 
 
     def connect_to_database!
-      db = database_instance(db_settings)
-      db.logger = logger if config.log_queries
-      # Improve performance for postgres
-      db.optimize_model_load = true if db.respond_to?(:optimize_model_load)
-      self.database = db
+      self.database = database_instance(db_settings).tap do |db|
+        db.logger = logger if config.log_queries
+        # Improve performance for postgres
+        db.optimize_model_load = true if db.respond_to?(:optimize_model_load)
+      end
     end
 
     def database_instance(opts)
