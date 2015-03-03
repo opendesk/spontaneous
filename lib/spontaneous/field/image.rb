@@ -95,6 +95,10 @@ module Spontaneous::Field
       original.src
     end
 
+    def url
+      original.url
+    end
+
     def filepath
       unprocessed_value
     end
