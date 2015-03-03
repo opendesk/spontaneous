@@ -128,8 +128,11 @@ module Spontaneous::Field
 
 
     def export(user = nil)
+      processed = Hash[outputs.map { |size|
+        [size, sizes[size].export(user)]
+      }]
       super(user).merge({
-        :processed_value => processed_values
+        processed_value: processed
       })
     end
 
