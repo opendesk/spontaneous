@@ -968,6 +968,22 @@ describe "Fields" do
       end
     end
 
+    it "includes a local temp url for fields with pending values" do
+      field = @instance.image
+      Spontaneous::Simultaneous.expects(:fire).with(:update_fields, {
+        "fields" => [field.id]
+      })
+      File.open(@image, "r") do |file|
+        field.pending_version.must_equal 0
+        Spontaneous::Field.set(@site, field, {:tempfile => file, :filename => "something.gif", :type => "image/gif"}, nil, true)
+        export = field.export
+        values = export[:processed_value]
+        assert values.key?(:__pending__)
+        pending = values[:__pending__][:value]
+        pending[:src].must_match %r{^/media/}
+      end
+    end
+
     describe "page locks" do
       before do
         @now = Time.now

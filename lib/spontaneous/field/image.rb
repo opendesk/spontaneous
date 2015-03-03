@@ -131,6 +131,7 @@ module Spontaneous::Field
       processed = Hash[outputs.map { |size|
         [size, sizes[size].export(user)]
       }]
+      processed.update(__pending__: pending_value) if has_pending_value?
       super(user).merge({
         processed_value: processed
       })
