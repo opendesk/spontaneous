@@ -193,6 +193,12 @@ describe "File Fields" do
         @storage.url_mapper = ->(path) { "https://cdn.example.com#{path}" }
         @field.url.must_match %r[^https://cdn.example.com/0000#{@instance.id}/0001/vimlogo.pdf$]
       end
+
+      it 'falls back to the site’s default if initialized before storage_name output was defined' do
+        @field.value = path
+        @field.stubs(:storage_name).returns('[]')
+        @field.url.must_match %r[^/0000#{@instance.id}/0001/vimlogo.pdf$]
+      end
     end
   end
 end

@@ -24,7 +24,7 @@ class Spontaneous::Site
 
     def storage(name = nil)
       return storage_backends.first if name.nil?
-      storage_backends.detect { |storage| storage.name == name }
+      storage_backends.detect { |storage| storage.name == name } || default_storage
     end
 
     def storage_for_mimetype(mimetype)
