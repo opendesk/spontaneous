@@ -69,7 +69,6 @@ module Spontaneous::Model::Page
     end
 
     def process_root_action(site, env, format)
-      env[S::Constants::PATH_INFO] = S::Constants::SLASH
       run_controller(site, :__nil__, env, format)
     end
 

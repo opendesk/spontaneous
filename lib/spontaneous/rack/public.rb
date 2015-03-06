@@ -92,7 +92,20 @@ module Spontaneous
       end
 
       def find_page_by_path(path)
-        site.by_path(path)
+        with_scope { site.by_path(path) } || find_page_with_wildcards(path)
+      end
+
+      # if we get to here it's because the path hasn't been found
+      def find_page_with_wildcards(path)
+        parts = path.split('/')
+        length = parts.length - 2
+        range = (1..length).to_a.reverse
+
+        try = range.map { |l| parts[0..l].join("/") }
+        candidate = with_scope { site.model::Page.where(path: try).order(Sequel.desc(:depth)).first }
+        return nil if candidate.nil? || !candidate.dynamic?(request.request_method)
+
+        candidate
       end
 
       def output(name)
@@ -184,6 +197,10 @@ module Spontaneous
       # our 404 page should come from the CMS
       def not_found!
         404
+      end
+
+      def with_scope
+        yield
       end
     end
   end

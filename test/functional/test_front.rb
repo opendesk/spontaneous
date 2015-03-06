@@ -75,6 +75,11 @@ describe "Front" do
       layout { "${ path }.${ __format }" }
     end
 
+    class ::TakeItPage < ::Page
+      layout(:html) { "take it ${id} {{ splat }}" }
+      box :pages
+    end
+
     root = ::SitePage.create
     about = ::SitePage.create(:slug => "about", :uid => "about")
     feed = ::FeedPage.create(:slug => "feed", :uid => "feed")
@@ -83,6 +88,8 @@ describe "Front" do
     dynamic_request_params = ::DynamicRequestParams.create(slug: "dynamic-request-params", uid: "dynamic_request_params")
     dynamic_render_params = ::DynamicRenderParams.create(slug: "dynamic-render-params", uid: "dynamic_render_params")
     commentable = ::CommentablePage.create(slug:"commentable", uid: "commentable")
+    take_it =  TakeItPage.create(slug: 'takeit', uid: 'takeit')
+    take_it_again =  TakeItPage.create(slug: 'again', uid: 'again')
     root.pages << about
     root.pages << feed
     root.pages << news
@@ -90,12 +97,17 @@ describe "Front" do
     root.pages << dynamic_render_params
     root.pages << static
     root.pages << commentable
+    root.pages << take_it
+    take_it.pages << take_it_again
     root.save
+    take_it.save
 
     let(:root_id) { root.id }
     let(:about_id) { about.id }
     let(:feed_id) { feed.id }
     let(:news_id) { news.id }
+    let(:take_it_id) { take_it.id }
+    let(:take_it_again_id) { take_it_again.id }
     let(:dynamic_request_params_id) { dynamic_request_params.id }
     let(:dynamic_render_params_id) { dynamic_render_params.id }
     let(:static_id) { static.id }
@@ -111,7 +123,7 @@ describe "Front" do
   end
 
   finish do
-    [:SitePage, :StaticPage, :DynamicRequestParams, :DynamicRenderParams, :CommentablePage, :FeedPage].each do |const|
+    [:SitePage, :StaticPage, :DynamicRequestParams, :DynamicRenderParams, :CommentablePage, :FeedPage, :TakeItPage].each do |const|
       Object.send(:remove_const, const) rescue nil
     end
     if defined?(Content)
@@ -128,6 +140,8 @@ describe "Front" do
   let(:about) { Content[about_id] }
   let(:feed) { Content[feed_id] }
   let(:news) { Content[news_id] }
+  let(:take_it) { Content[take_it_id] }
+  let(:take_it_again) { Content[take_it_again_id] }
   let(:dynamic_request_params) { Content[dynamic_request_params_id] }
   let(:dynamic_render_params) { Content[dynamic_render_params_id] }
   let(:static) { Content[static_id] }
@@ -732,6 +746,29 @@ describe "Front" do
           get "/commentable/@drummer/nothing"
           assert last_response.ok?, "Expected 200 got #{last_response.status}"
           last_response.body.must_equal "Something"
+        end
+      end
+    end
+
+    describe 'wildcard paths' do
+      let(:page) { take_it }
+      let(:again) { take_it_again }
+
+      it 'renders a url that resolves to a page accepting the path' do
+        TakeItPage.controller do
+          get '*' do
+            render splat: params[:splat].first
+          end
+        end
+        [
+          ["#{page.path}/something", page],
+          ["#{page.path}/something/else", page],
+          ["#{page.path}/really/something/else/entirely", page],
+          ["#{again.path}/something/else/entirely", again]
+        ].each do |path, expected|
+          get path
+          assert last_response.ok?, "Expected 200 got #{last_response.status}"
+          last_response.body.must_equal "take it #{expected.id} #{path}"
         end
       end
     end

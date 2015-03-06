@@ -4,9 +4,11 @@ require 'sinatra/base'
 
 module Spontaneous::Rack
   class PageController < Sinatra::Base
+    SPLAT = '*'.freeze
+
     class << self
       # We wrap Sinatra's route methods in order to do two things:
-      #   1. To provide a path of '/' when none is given and
+      #   1. To provide a path of '*' when none is given and
       #   2. To register the presence of a handler for each method in order to
       #      correctly respond to the #dynamic? test
       def get(*args, &bk)     __dynamic!(:get,     super(*__route_args(args), &bk)) end
@@ -28,7 +30,7 @@ module Spontaneous::Rack
 
       def __route_args(args)
         opts = args.extract_options!
-        path = String === args.first ? args.first : '/'
+        path = (String === args.first) ? args.first : SPLAT
         [path, opts]
       end
 
