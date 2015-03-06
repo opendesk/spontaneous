@@ -39,7 +39,6 @@ Spontaneous.Preview = (function($, S, $window) {
 					});
 					// don't load the page details into the top-bar if we're viewing a private page
 					if (preview.pathIsPublic(icw.location.pathname)) {
-						console.log('currentLocation', icw.location.pathname)
 						S.Location.load_path(icw.location.pathname);
 					}
 				}
