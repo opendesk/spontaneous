@@ -4,8 +4,6 @@ require 'sinatra/base'
 
 module Spontaneous::Rack
   class PageController < Sinatra::Base
-    SPLAT = '*'.freeze
-
     class << self
       # We wrap Sinatra's route methods in order to do two things:
       #   1. To provide a path of '*' when none is given and
@@ -30,7 +28,7 @@ module Spontaneous::Rack
 
       def __route_args(args)
         opts = args.extract_options!
-        path = (String === args.first) ? args.first : SPLAT
+        path = (String === args.first) ? args.first : S::Constants::SLASH
         [path, opts]
       end
 

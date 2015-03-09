@@ -87,12 +87,13 @@ module Spontaneous
       end
 
       def find_page!(path)
+        @controller_path = S::Constants::SLASH
         @path, @output, @action = parse_path(path)
         @page = find_page_by_path(@path)
       end
 
       def find_page_by_path(path)
-        with_scope { site.by_path(path) } || find_page_with_wildcards(path)
+        with_scope { site.by_path(path)  || find_page_with_wildcards(path) }
       end
 
       # if we get to here it's because the path hasn't been found
@@ -102,8 +103,10 @@ module Spontaneous
         range = (1..length).to_a.reverse
 
         try = range.map { |l| parts[0..l].join("/") }
-        candidate = with_scope { site.model::Page.where(path: try).order(Sequel.desc(:depth)).first }
+        candidate = site.model::Page.where(path: try).order(Sequel.desc(:depth)).first
         return nil if candidate.nil? || !candidate.dynamic?(request.request_method)
+
+        @controller_path = path.slice(candidate.path.length, path.length - candidate.path.length)
 
         candidate
       end
@@ -119,7 +122,7 @@ module Spontaneous
       def render_get
         return call_action! if @action
         if page.dynamic?(request.request_method)
-          invoke_action { page.process_root_action(site, env.dup, @output) }
+          invoke_action { page.process_root_action(site, env_for_action, @output) }
         else
           render_page_with_output
         end
@@ -132,11 +135,15 @@ module Spontaneous
 
         return call_action! if @action
 
-        invoke_action { page.process_root_action(site, env.dup, @output) }
+        invoke_action { page.process_root_action(site, env_for_action, @output) }
       end
 
       def call_action!
-        invoke_action { @page.process_action(site, action, env.dup, @output) }
+        invoke_action { @page.process_action(site, action, env_for_action, @output) }
+      end
+
+      def env_for_action
+        env.merge(S::Constants::PATH_INFO => @controller_path)
       end
 
       def invoke_action

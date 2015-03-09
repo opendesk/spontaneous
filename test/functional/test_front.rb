@@ -754,6 +754,10 @@ describe "Front" do
       let(:page) { take_it }
       let(:again) { take_it_again }
 
+      after do
+        TakeItPage.instance_variable_set(:@controllers, nil)
+      end
+
       it 'renders a url that resolves to a page accepting the path' do
         TakeItPage.controller do
           get '*' do
@@ -761,15 +765,47 @@ describe "Front" do
           end
         end
         [
-          ["#{page.path}/something", page],
-          ["#{page.path}/something/else", page],
-          ["#{page.path}/really/something/else/entirely", page],
-          ["#{again.path}/something/else/entirely", again]
+          ["/something", page],
+          ["/something/else", page],
+          ["/really/something/else/entirely", page],
+          ["/something/else/entirely", again]
         ].each do |path, expected|
-          get path
+          get "#{expected.path}#{path}"
           assert last_response.ok?, "Expected 200 got #{last_response.status}"
           last_response.body.must_equal "take it #{expected.id} #{path}"
         end
+      end
+
+      it 'returns 404 if the requested path doesn’t match the controller’s route' do
+        TakeItPage.controller do
+          get '/womble/?:where?' do
+            render splat: params[:where]
+          end
+        end
+        get "#{page.path}/womble/around"
+        assert last_response.ok?, "Expected 200 got #{last_response.status}"
+        last_response.body.must_equal "take it #{page.id} around"
+
+        get "#{page.path}/womble"
+        assert last_response.ok?, "Expected 200 got #{last_response.status}"
+        last_response.body.must_equal "take it #{page.id} "
+
+        get "#{page.path}/wimble/around"
+        assert last_response.status == 404
+      end
+
+      it 'returns 404 if the controller is only configured to match the root' do
+        TakeItPage.controller do
+          get do
+            render splat: 'root'
+          end
+        end
+        get page.path
+        assert last_response.ok?, "Expected 200 got #{last_response.status}"
+        last_response.body.must_equal "take it #{page.id} root"
+
+        get "#{page.path}/womble"
+        assert last_response.status == 404, "Expected 404 but got #{last_response.status}"
       end
     end
 
