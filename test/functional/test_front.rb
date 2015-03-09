@@ -760,6 +760,7 @@ describe "Front" do
       let(:again) { take_it_again }
 
       after do
+        root.class.instance_variable_set(:@controllers, nil)
         TakeItPage.instance_variable_set(:@controllers, nil)
       end
 
@@ -811,6 +812,25 @@ describe "Front" do
 
         get "#{page.path}/womble"
         assert last_response.status == 404, "Expected 404 but got #{last_response.status}"
+      end
+
+      it 'can fall back to controllers defined on the site homepage' do
+        root.class.controller do
+          get '/' do
+            "ow"
+          end
+          get '/slimy/:who' do
+            "<#{params[:who]}>"
+          end
+        end
+
+        get '/slimy/monster'
+        assert last_response.ok?, "Expected 200 got #{last_response.status}"
+        last_response.body.must_equal "<monster>"
+
+        get '/'
+        assert last_response.ok?, "Expected 200 got #{last_response.status}"
+        last_response.body.must_equal "ow"
       end
     end
 

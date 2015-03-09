@@ -87,7 +87,7 @@ module Spontaneous
       end
 
       def find_page!(path)
-        @controller_path = S::Constants::SLASH
+        @controller_path = SLASH
         @path, @output, @action = parse_path(path)
         @page = find_page_by_path(@path)
       end
@@ -96,17 +96,41 @@ module Spontaneous
         with_scope { site.by_path(path)  || find_page_with_wildcards(path) }
       end
 
-      # if we get to here it's because the path hasn't been found
+      # if we get to here it's because the path hasn't been found. This will get called for
+      # every request where the request doesn’t resolve to a path found in the db
+      # and will always try the site homepage as a last resort. So if you need many dynamic
+      # routes to resolve to a single page, e.g. for a single page app, then you just
+      # need to accept all those routes in a controller on the class of the site’s homepage
+      # and render your SPA template from that, e.g.
+      #
+      #     class Homepage < Page
+      #       controller do
+      #         get '/app*' do
+      #           render
+      #         end
+      #       end
+      #     end
+      #
       def find_page_with_wildcards(path)
         parts = path.split('/')
         length = parts.length - 2
         range = (1..length).to_a.reverse
 
-        try = range.map { |l| parts[0..l].join("/") }
+        # make sure we go all the way back to the site homepage
+        try = range.map { |l| parts[0..l].join(SLASH) }.push(SLASH)
         candidate = site.model::Page.where(path: try).order(Sequel.desc(:depth)).first
         return nil if candidate.nil? || !candidate.dynamic?(request.request_method)
 
-        @controller_path = path.slice(candidate.path.length, path.length - candidate.path.length)
+        # don't pass the full path of the request to the controller, just
+        # the bit after the candidate page’s path.
+        cpath = candidate.path
+        @controller_path = path.slice(cpath.length, path.length - cpath.length)
+
+        # special handling of root, as always so that a controller on the root page that
+        # matches '/', e.g. `get '/'` is passed a path that starts with '/'
+        if cpath == SLASH
+          @controller_path.insert(0, SLASH)
+        end
 
         candidate
       end
