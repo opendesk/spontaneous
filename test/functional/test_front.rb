@@ -15,6 +15,17 @@ describe "Front" do
     Spontaneous::Output.write_compiled_scripts = true
 
 
+    class ::PageController < S::Rack::PageController
+      # Define a per-site base controller for all controller classes here so
+      # that we can test it's use later on.
+      # If I define it only in the test where it's used then it's too late as
+      # the controller hierarchy will have already been built upon some other
+      # base class.
+      #
+      # (Another argument for replacing these [start..finish] blocks with
+      # [before..after] ones)
+    end
+
     site = setup_site(site_root)
     let(:site) { site  }
     S::State.delete
@@ -123,7 +134,7 @@ describe "Front" do
   end
 
   finish do
-    [:SitePage, :StaticPage, :DynamicRequestParams, :DynamicRenderParams, :CommentablePage, :FeedPage, :TakeItPage].each do |const|
+    [:SitePage, :StaticPage, :DynamicRequestParams, :DynamicRenderParams, :CommentablePage, :FeedPage, :TakeItPage, :PageController].each do |const|
       Object.send(:remove_const, const) rescue nil
     end
     if defined?(Content)
@@ -610,7 +621,7 @@ describe "Front" do
 
       after do
         Object.send(:remove_const, :SubPage) rescue nil
-        CommentablePage.instance_variable_set(:@request_blocks, {})
+        CommentablePage.instance_variable_set(:@controllers, nil)
         CommentablePage.send(:remove_const, :StatusController) rescue nil
         CommentablePage.send(:remove_const, :TestController) rescue nil
         CommentablePage.send(:remove_const, :Test2Controller) rescue nil
@@ -725,10 +736,8 @@ describe "Front" do
 
       describe "overriding base controller class" do
         before do
-          class ::PageController < S::Rack::PageController
-            get '/nothing' do
-              'Something'
-            end
+          ::PageController.get '/nothing' do
+            'Something'
           end
 
           CommentablePage.controller :drummer do
@@ -736,10 +745,6 @@ describe "Front" do
               "Success"
             end
           end
-        end
-
-        after do
-          Object.send(:remove_const, :PageController)
         end
 
         it "affect all controller actions" do
