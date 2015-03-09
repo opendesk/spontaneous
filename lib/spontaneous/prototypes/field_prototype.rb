@@ -130,12 +130,13 @@ module Spontaneous::Prototypes
     end
 
     def default(instance = nil)
-      case (default = @options[:default])
+      default_value = case (default = @options[:default])
       when Proc
         default[instance]
       else
         default
       end
+      instance_class.make_default_value(instance, default_value)
     end
 
     def dynamic_default?

@@ -43,4 +43,11 @@ describe "Option fields" do
     @field.label.must_equal "Value A"
     @field.unprocessed_value.must_equal %(["a", "Value A"])
   end
+
+  it 'allows for the setting of a default value' do
+    @content_class.field :type, :select, :options => [["a", "A Label"], ["b", "B Label"], ["c", "C Label"]], default: "b"
+    @instance = @content_class.new
+    @instance.type.value.must_equal "b"
+    @instance.type.value(:label).must_equal "B Label"
+  end
 end
