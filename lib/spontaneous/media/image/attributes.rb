@@ -6,7 +6,7 @@ module Spontaneous::Media
       attr_reader  :storage, :filepath, :storage
 
       def initialize(site, params={})
-        @params = params.dup || {}
+        @params = params.try(:dup) || {}
         @storage = site.storage(storage_name)
       end
 
