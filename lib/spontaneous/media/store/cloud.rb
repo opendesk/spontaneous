@@ -144,15 +144,24 @@ module Spontaneous::Media::Store
     def public_host=(host)
       @public_host = host
       unless host.blank?
-        uri = URI.parse(host)
-        self.url_mapper = lambda { |path|
+        self.url_mapper = host_url_mapper(host)
+      end
+    end
+
+    def host_url_mapper(host)
+      uri = URI.parse(host)
+      lambda { |path|
+        return path if path.blank?
+        begin
           path_uri = URI.parse(path)
           return path if path_uri.absolute?
           url = uri.clone
           url.path = path
           url.to_s
-        }
-      end
+        rescue => e
+          path
+        end
+      }
     end
 
     def root
