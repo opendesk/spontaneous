@@ -26,6 +26,8 @@ module Spontaneous::Media
         @params[:src].blank?
       end
 
+      alias_method :empty?, :blank?
+
       def src
         storage.to_url(@params[:src])
       end
