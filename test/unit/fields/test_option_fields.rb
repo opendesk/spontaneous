@@ -50,4 +50,12 @@ describe "Option fields" do
     @instance.type.value.must_equal "b"
     @instance.type.value(:label).must_equal "B Label"
   end
+
+  it 'exports properly with a null value' do
+    @content_class.field :type, :select, :options => [["a", "A Label"], ["b", "B Label"], ["c", "C Label"]]
+    @instance = @content_class.new
+    e = @instance.fields[:type].export(nil)
+    e[:unprocessed_value].must_equal ""
+    e[:processed_value].must_equal ""
+  end
 end

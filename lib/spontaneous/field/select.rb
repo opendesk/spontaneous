@@ -80,7 +80,9 @@ module Spontaneous::Field
 
     # Maps a configured default value to the appropriate JSON encoded [value, label] array
     def self.make_default_value(instance, value)
-      Spontaneous::JSON.encode option_list(instance.owner).detect { |opt, label| opt == value }
+      option = option_list(instance.owner).detect { |opt, label| opt == value }
+      return nil if option.nil?
+      Spontaneous::JSON.encode option
     end
 
     def option_list
