@@ -8,7 +8,7 @@ module Spontaneous::Field
     has_editor
 
     def blank?
-      value.blank?
+      values[:path].blank?
     end
 
     # In the case of clearing the field we will have been given a pending_value of ""

@@ -23,7 +23,7 @@ module Spontaneous::Media
       end
 
       def blank?
-        src.blank?
+        @params[:src].blank?
       end
 
       def src
