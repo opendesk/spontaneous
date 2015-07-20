@@ -130,7 +130,11 @@ module Spontaneous::Prototypes
     end
 
     def default(instance = nil)
-      default_value = case (default = @options[:default])
+      instance_class.make_default_value(instance, default_value_for_instance(instance))
+    end
+
+    def default_value_for_instance(instance)
+      case (default = @options[:default])
       when Proc
         default[instance]
       else

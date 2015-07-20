@@ -46,6 +46,10 @@ class Spontaneous::Site
       Spontaneous::Publishing::Steps.rerender(publish_steps)
     end
 
+    def reindex_steps
+      Spontaneous::Publishing::Steps.reindex(publish_steps)
+    end
+
     def publishing_method
       resolve_background_mode(Spontaneous::Publishing)
     end
@@ -59,16 +63,20 @@ class Spontaneous::Site
       @output_store ||= Spontaneous::Output::Store.new(:File, root: revision_root)
     end
 
-    def publish_pages(page_list=nil)
-      publishing_method.new(self, working_revision, publish_steps).publish_pages(page_list)
+    def publish_pages(page_list=nil, user = nil)
+      publishing_method.new(self, working_revision, publish_steps).publish_pages(page_list, user)
     end
 
-    def publish_all
-      publishing_method.new(self, working_revision, publish_steps).publish_all
+    def publish_all(user = nil)
+      publishing_method.new(self, working_revision, publish_steps).publish_all(user)
     end
 
     def rerender
       publishing_method.new(self, published_revision, rerender_steps).rerender
+    end
+
+    def reindex
+      publishing_method.new(self, published_revision, reindex_steps).reindex
     end
 
     def publishing_status
@@ -85,15 +93,15 @@ class Spontaneous::Site
     end
 
     def with_published(&block)
-      Spontaneous::Content.scope(published_revision, true, &block)
+      model.scope(published_revision, true, &block)
     end
 
     def with_editable(&block)
-      Spontaneous::Content.scope(nil, false, &block)
+      model.scope(nil, false, &block)
     end
 
     def with_preview(&block)
-      Spontaneous::Content.scope(nil, true, &block)
+      model.scope(nil, true, &block)
     end
 
     protected

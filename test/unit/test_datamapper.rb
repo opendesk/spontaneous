@@ -260,6 +260,15 @@ describe "DataMapper" do
       ]
     end
 
+    it "supports the exclude method" do
+      @mapper.exclude([MockContent2], label: "this").all
+      @mapper.exclude!(label: "this").all
+      @database.sqls.must_equal [
+        "SELECT * FROM content WHERE ((type_sid IN ('MockContent2')) AND (label != 'this'))",
+        "SELECT * FROM content WHERE ((type_sid IN ('MockContent2', 'MockContent3')) AND (label != 'this'))"
+      ]
+    end
+
     it "support filtering using virtual rows" do
       @database.fetch = [
         { id:1, label:"column1", type_sid:"MockContent2" },
@@ -1404,7 +1413,7 @@ describe "DataMapper" do
     end
   end
 
-  describe "performance" do
+  describe "scope cache" do
     it "use a cached version within revision blocks" do
       @mapper.revision(20) do
         assert @mapper.active_scope.equal?(@mapper.active_scope), "Dataset it be the same object"
@@ -1508,6 +1517,44 @@ describe "DataMapper" do
         b = @mapper.with_cache("key") { @mapper.filter(nil, label: "frog").first }
       end
       @database.sqls.must_equal [
+        "SELECT * FROM __r00020_content WHERE ((type_sid IN ('MockContent2', 'MockContent3')) AND (label = 'frog')) LIMIT 1"
+      ]
+    end
+
+    it "uses a distinct cache for each scope" do
+      @database.fetch = [
+        { id: 20, type_sid:"MockContent", parent_id: 7 }
+      ]
+      a = b = c = nil
+      @mapper.scope(20, false) do
+        a = @mapper.with_cache("key") { @mapper.filter(nil, label: "frog").first }
+        @mapper.scope(nil, false) do
+          b = @mapper.with_cache("key") { @mapper.filter(nil, label: "frog").first }
+          @mapper.scope(20, true) do
+            c = @mapper.with_cache("key") { @mapper.filter(nil, label: "frog").first }
+          end
+        end
+        a = @mapper.with_cache("key") { @mapper.filter(nil, label: "frog").first }
+      end
+      @database.sqls.must_equal [
+        "SELECT * FROM __r00020_content WHERE ((type_sid IN ('MockContent2', 'MockContent3')) AND (label = 'frog')) LIMIT 1",
+        "SELECT * FROM content WHERE ((type_sid IN ('MockContent2', 'MockContent3')) AND (label = 'frog')) LIMIT 1",
+        "SELECT * FROM __r00020_content WHERE ((hidden IS FALSE) AND (type_sid IN ('MockContent2', 'MockContent3')) AND (label = 'frog')) LIMIT 1",
+      ]
+    end
+
+    it "allows for clearing specific scope cache keys" do
+      @database.fetch = [
+        { id: 20, type_sid:"MockContent", parent_id: 7 }
+      ]
+      a = b = nil
+      @mapper.scope(20, false) do
+        a = @mapper.with_cache("key") { @mapper.filter(nil, label: "frog").first }
+        @mapper.clear_cache("key")
+        b = @mapper.with_cache("key") { @mapper.filter(nil, label: "frog").first }
+      end
+      @database.sqls.must_equal [
+        "SELECT * FROM __r00020_content WHERE ((type_sid IN ('MockContent2', 'MockContent3')) AND (label = 'frog')) LIMIT 1",
         "SELECT * FROM __r00020_content WHERE ((type_sid IN ('MockContent2', 'MockContent3')) AND (label = 'frog')) LIMIT 1"
       ]
     end

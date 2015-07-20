@@ -22,11 +22,10 @@ module Spontaneous::Model::Core
       super || 0
     end
 
-    def after_save
-      contents.each do |entry|
-        entry.save if entry.modified?
-      end
-      super
+    # Used to work out a new value for the content item's depth value
+    # based on the depth of its owner.
+    def content_tree_depth(owner)
+      owner.content_depth + 1
     end
 
     def destroy(remove_owner_entry=true, origin = nil)
@@ -35,21 +34,13 @@ module Spontaneous::Model::Core
       recursive_destroy(origin)
       origin.child_page_deleted! if (origin && page?)
       owner = self.owner
-      owner.destroy_entry!(self) if (owner && remove_owner_entry)
       super()
+      @box.content_destroyed(self) if (@box && remove_owner_entry)
       origin.after_child_destroy if is_origin && origin
     end
 
     def recursive_destroy(origin)
-      all_contents.destroy(origin)
-    end
-
-    def destroy_entry!(entry)
-      contents.remove(entry)
-      # save the owner because it won't be obvious to the caller
-      # that content other than the destroyed object will have been
-      # modified
-      self.save
+      boxes.destroy(origin)
     end
 
     def content_depth
@@ -62,28 +53,16 @@ module Spontaneous::Model::Core
     end
 
     def contents
-      return visible_contents if model.visible_only?
-      all_contents
+      contents_of(boxes)
     end
 
-    # ensure that all access to pieces is through their corresponding entry
-    # alias_method :pieces, :entries
-
-    def all_contents
-      @all_contents ||= Spontaneous::Collections::EntrySet.new(self, entry_store)
+    def content_ids
+      boxes.flat_map { |box| box.ids }
     end
 
-    def visible_contents
-      @visible_contents ||= all_contents.visible!
+    def contents_of(set)
+      set.flat_map { |entry| entry.contents }
     end
-
-    protected(:all_contents, :visible_contents)
-
-    def reload
-      @all_contents = @visible_contents = nil
-      super
-    end
-
 
     def first
       contents.first
@@ -93,88 +72,14 @@ module Spontaneous::Model::Core
       contents.last
     end
 
-    def push(page_or_piece)
-      insert(-1, page_or_piece)
-    end
-
-    alias_method :<<, :push
-
-    def insert(index, page_or_piece, box)
-      save if new?
-      if page_or_piece.page?
-        insert_page(index, page_or_piece, box)
-      else
-        insert_piece(index, page_or_piece, box)
-      end
-    end
-
-
-    # TODO: This insert process is too fragile & requires too many intermediate #saves
-    # Perhaps some unified insertion process would simplify the requirements
-    #
-    # e.g. page.box.create(OtherPage, slug: 'something')
-    #      page.box.build(OtherPage, slug: 'something')
-    #
-    # A lot of the problems come from the child's potential lack of an id
-    # because it's a new record. If I wrap the process then I do two things:
-    #
-    #   1. prevent the creation of pages without a containing box
-    #   2. control the 'new' state of the added instance so I don't have to
-    #      manage two pathways
-    #
-    # This would entail making Content::new private or something.
-    #
-    def insert_page(index, child_page, box)
-      insert_with_style(:page, index, child_page, box) do
-        child_page.owner = self
-        if page
-          child_page.depth = page.depth + 1
-          page.unordered_children << child_page
-          child_page.parent = page
-          child_page.update_path
-        end
-      end
-    end
-
-    def insert_piece(index, piece, box)
-      insert_with_style(:piece, index, piece, box) do
-        piece.owner = self
-        piece.page = page if page
-        piece.depth = (content_depth || 0) + 1
-        piece.save
-      end
-    end
-
-    def insert_with_style(type, index, content, box, &block)
-      self.pieces << content
-      entry_style = style_for_content(content, box)
-      content.box_sid = box.schema_id if box
-      content._prototype = box.prototype_for_content(content) if box
-      content.set_visible(self.visible?, self.id)
-      content.after_insertion
-      content.save if content.new?
-      entry = \
-        case type
-      when :page
-        Spontaneous::PagePiece.new(self, content, entry_style ? entry_style.schema_id : nil)
-      when :piece
-        content.style = entry_style
-        content
-      end
-      begin
-        contents.insert(index, box, entry)
-      rescue TypeError, RuntimeError => e
-        # TODO: raise a custom more helpful error here
-        logger.error { "Attempting to modify visible only pieces" }
-        raise e
-      end
-      yield if block_given?
-      content.save
-
-      entry
-    end
-
+    # Called on the inserted content after it has been placed into a box
     def after_insertion
+    end
+
+    # Called on the owning item after new content has been inserted into one
+    # of its boxes
+    def save_after_insertion(inserted_content)
+      save
     end
 
     # added is my private mechanism for tracking if a content item is new
@@ -193,33 +98,70 @@ module Spontaneous::Model::Core
     end
 
     def set_position(new_position)
-      if box
-        box.set_position(self, new_position)
-      else
-        owner.contents.set_position(self, new_position)
-      end
+      box.set_position(self, new_position)
     end
 
     def style_for_content(content, box = nil)
-      if box
-        box.style_for_content(content)
-      else
-        content.default_style
-      end
+      box.style_for_content(content)
     end
 
     def available_styles(content)
       content.class.styles
     end
 
-
     def owner=(owner)
       super
       set_visibility_path
     end
 
+    class OwnerChange
+      def initialize(origin, old_value, new_value)
+        @origin, @old_value, @new_value = origin, old_value, new_value
+      end
+
+      def propagate
+        return if @old_value == @new_value
+        @origin.contents.each do |child|
+          child.set_visibility_path_from!(@origin)
+        end
+      end
+
+      def new_value
+        return nil if @new_value.blank?
+        @origin.model.split_materialised_path(@new_value).last
+      end
+
+      def old_value
+        return nil if @old_value.blank?
+        @origin.model.split_materialised_path(@old_value).last
+      end
+
+      def new_visibility_path
+        @new_value
+      end
+
+      def old_visibility_path
+        @old_value
+      end
+    end
+
+    included do
+      cascading_change :visibility_path do |origin, old_value, new_value|
+        OwnerChange.new(origin, old_value, new_value)
+      end
+    end
+
     def set_visibility_path
-      self[:visibility_path] = [owner.visibility_path, owner.id].compact.join(Spontaneous::VISIBILITY_PATH_SEP)
+      set_visibility_path_from(owner)
+    end
+
+    def set_visibility_path_from!(source)
+      set_visibility_path_from(source)
+      save
+    end
+
+    def set_visibility_path_from(source)
+      set(visibility_path: model.join_materialised_path([source.visibility_path, owner.id]), depth: content_tree_depth(source))
     end
 
     def set_visibility_path!

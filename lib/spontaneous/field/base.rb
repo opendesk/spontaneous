@@ -269,7 +269,7 @@ module Spontaneous
         pending_value[:version]
       end
 
-      def matches_version?(v)
+      def conflicts_version?(v)
         (version != v) && (pending_version != v)
       end
 
@@ -427,8 +427,9 @@ module Spontaneous
         unprocessed_value.blank?
       end
 
-      alias_method :empty?, :blank?
-
+      def empty?
+        blank?
+      end
 
       def or(field)
         return field if self.blank?

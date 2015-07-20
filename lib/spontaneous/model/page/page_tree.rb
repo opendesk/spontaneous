@@ -10,8 +10,9 @@ module Spontaneous::Model::Page
       @ancestors ||= ancestor_path.map { |id| content_model[id] }
     end
 
-    def ancestor(depth)
-      ancestors[depth]
+    def ancestor(at_depth)
+      return self if at_depth == depth
+      ancestors[at_depth]
     end
 
     # Returns a list of all the pages at a certain depth in the page tree for any page
@@ -41,8 +42,10 @@ module Spontaneous::Model::Page
       filter_proc = filter_list = nil
 
       if (filter_list = (opts.delete(:only) || opts.delete(:box) || opts.delete(:boxes)))
+        filter_list = Array(filter_list)
         filter_proc = proc { |box| filter_list.include?(box._name) }
       elsif (filter_list = opts.delete(:except))
+        filter_list = Array(filter_list)
         filter_proc = proc { |box| !filter_list.include?(box._name) }
       end
 
@@ -56,9 +59,9 @@ module Spontaneous::Model::Page
       filter_proc = filter_list = nil
 
       if (filter_list = opts.delete(:include))
-        filter_proc = proc { |p| filter_list.include?(p.class) }
+        filter_proc = proc { |p| filter_list.include?(p.content_class) }
       elsif (filter_list = opts.delete(:exclude))
-        filter_proc = proc { |p| !filter_list.include?(p.class) }
+        filter_proc = proc { |p| !filter_list.include?(p.content_class) }
       end
 
       if filter_list && filter_proc
@@ -69,14 +72,7 @@ module Spontaneous::Model::Page
     end
 
     def ordered_pages(boxes)
-      unordered_pages = self.children
-      ordered_pages   = []
-      boxes.each do |box|
-        box_id = box.schema_id.to_s
-        in_box, unordered_pages = unordered_pages.partition { |p| p.box_sid == box_id }
-        ordered_pages.concat in_box.sort { |a, b| a.position <=> b.position }
-      end
-      ordered_pages
+      boxes.flat_map { |box| box.select(&:page?) }
     end
 
     def root_at_depth(depth)

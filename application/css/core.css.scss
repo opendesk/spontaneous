@@ -1,4 +1,5 @@
 @import "definitions.css.scss";
+@import "animations.css.scss";
 @import "font.css.scss";
 
 
@@ -132,6 +133,32 @@
 			padding-bottom: 30px;
 			span {
 				color: #888888;
+			}
+		}
+		.page-buttons {
+			position:absolute;
+			right: $container-padding;
+			top: 10px;
+			button {
+				@include interface;
+				@include button(#222);
+				@include transition(opacity 0.2s);
+				color: #aaa !important;
+				background-image:none;
+				min-width: 131px;
+			}
+
+			button.request-running {
+				&:before {
+					@include animation(spin 0.6s infinite linear);
+					@include awesome-icon("\f1ce");
+					position: absolute;
+					left: 6px;
+				}
+			}
+			button[disabled],
+			button[disabled]:hover {
+				opacity: 0.5;
 			}
 		}
 		.path, .path h3, .path h3.developer a {
@@ -868,7 +895,6 @@
 
 #page-slots.slots .slot-entries {
 	padding-top: 32px;
-	padding-bottom: 25%;
 	position: relative;
 	.fields-preview {
 		@include rounded;
@@ -876,8 +902,15 @@
 		background: none;
 		background-color: white;
 	}
+	// added when a box is showing all its entries to give the last one some
+	// breathing room in the page
+	&.entries-loaded {
+		padding-bottom: 200px;
+	}
 	.entry-wrap {
 		@extend .clearfix;
+		transition: opacity 0.2s;
+		-webkit-transition: opacity 0.2s;
 		position: relative;
 		margin-left: $container-padding - 6;
 		margin-right: $container-padding;
@@ -1680,5 +1713,3 @@
 @import "developer.css.scss";
 @import "meta.css.scss";
 @import "jquery-ui-1.8.21.custom/ui-lightness.css.scss";
-
-

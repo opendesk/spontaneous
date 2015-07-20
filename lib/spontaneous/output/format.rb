@@ -36,6 +36,10 @@ module Spontaneous::Output
         ::Rack::Mime.mime_type(".#{format}", nil) || inherited_mimetype
       end
 
+      def calculated_mimetype
+        calculate_mimetype(format)
+      end
+
       def default_options
         { :private => false,
           :dynamic => false }
@@ -51,6 +55,11 @@ module Spontaneous::Output
       end
 
       alias_method :mime_type, :mimetype
+
+      def custom_mimetype?
+        calculated_mimetype != mimetype
+      end
+
       def format
         @options[:format]
       end
@@ -97,6 +106,7 @@ module Spontaneous::Output
         @options[:dynamic]
       end
 
+
       def postprocess
         @options[:postprocess]
       end
@@ -116,7 +126,9 @@ module Spontaneous::Output
     attr_reader :page
     attr_accessor :content
 
-    def_delegators "self.class", :format, :dynamic?, :extension, :to_sym, :mimetype, :mime_type, :public?, :private?, :context, :name, :extension, :options
+    def_delegators "self.class", :format, :dynamic?, :extension, :to_sym,
+      :mimetype, :mime_type, :custom_mimetype?,
+      :public?, :private?, :context, :name, :extension, :options
 
     def initialize(page, content = nil)
       @page, @content = page, content
@@ -167,11 +179,10 @@ module Spontaneous::Output
 
     def publish_page(renderer, revision, transaction)
       rendered = render_using(renderer, {:revision => revision})
-      transaction.store(self, renderer.is_dynamic_template?(rendered), rendered)
+      transaction.store_output(self, renderer.is_dynamic_template?(rendered), rendered)
     end
 
     def output_path(revision, render)
-      ext = nil
       template_dynamic = Spontaneous::Output::Template.is_dynamic?(render)
       path = Spontaneous::Output.output_path(revision, self, template_dynamic)
 
@@ -196,6 +207,14 @@ module Spontaneous::Output
       path = page.path
       path = "/index" if path == "/"
       [path, name].join(".")
+    end
+
+    def output_protected?
+      private? || custom_mimetype?
+    end
+
+    def protected?
+      output_protected? || page.dynamic? || page.in_private_tree?
     end
   end
 end

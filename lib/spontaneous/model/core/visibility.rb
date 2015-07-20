@@ -26,6 +26,15 @@ module Spontaneous::Model::Core
       self.hidden || false
     end
 
+    def visibility_ancestors
+      visibility_ancestor_ids.map { |id| content_model[id] }
+    end
+
+    def visibility_ancestor_ids
+      return [] if visibility_path.blank?
+      visibility_path.split(Spontaneous::VISIBILITY_PATH_SEP).map(&:to_i)
+    end
+
     def hide!
       set_visible!(false)
     end
@@ -42,7 +51,6 @@ module Spontaneous::Model::Core
       end
     end
 
-    ##
     # Is true when the current object is hidden independently of its ancestors
     # and false when hidden because one of its ancestors is hidden (so to show
     # this you need to show that ancestor)
@@ -50,89 +58,118 @@ module Spontaneous::Model::Core
       hidden? && hidden_origin.blank?
     end
 
+    # When we're placed into the content tree we want to inherit our
+    # visibility from our new owner
+    def owner=(owner)
+      set_visible(owner.visible?, owner.id)
+      super
+    end
+
     def visible=(visible)
-      protect_root_visibility!
       set_visible(visible)
     end
 
+    protected
+
+    def set_visible(visible, origin = nil)
+      return [] unless visible? != visible
+      apply_set_visible(visible, origin)
+      schedule_visibility_cascade(visible, origin || id)
+    end
+
     def set_visible!(state)
-      self.set_visible(state)
-      self.save
-      self
+      set_visible_with_cascade!(state)
+    end
+
+    def after_save
+      super
+      if (args = @_visibility_requires_cascade)
+        @_visibility_requires_cascade = nil
+        cascade_visibility(*args)
+      end
+    end
+
+    def schedule_visibility_cascade(visible, origin)
+      @_visibility_requires_cascade = [visible, origin]
+    end
+
+    def verify_visibility_change!(show)
+      protect_root_visibility!
+      return if !show || visible?
+      raise Spontaneous::NotShowable.new(self, hidden_origin) unless showable?
     end
 
     # Private: Used by visibility modifications to force a cascade of visibility
     # state during the publish process.
     def set_visible_with_cascade!(state)
-      set_visible(state)
-      force_visibility_cascade
-      self.save
-      self
+      apply_set_visible(state, nil)
+      save
+      cascade_visibility(state, id)
     end
 
-    def set_visible(visible, hidden_origin = nil)
-      protect_root_visibility!
-      if self.visible? != visible
-        raise Spontaneous::NotShowable.new(self, hidden_origin) if hidden? && visible && !showable?
-        self[:hidden] = !visible
-        self[:hidden_origin] = hidden_origin
-        force_visibility_cascade
+    def apply_set_visible(visible, origin)
+      verify_visibility_change!(visible)
+      apply_set_visible!(visible, origin)
+    end
+
+    def apply_set_visible!(visible, origin)
+      self[:hidden] = !visible
+      self[:hidden_origin] = origin
+    end
+
+    def cascade_visibility(visible, origin)
+      affected = find_descendents(visible)
+      descendents = affected[1..-1]
+      origin = nil if visible
+      content_model.where(id: descendents.map(&:id)).update(hidden: !visible, hidden_origin: origin)
+      descendents.each { |d| d.apply_set_visible!(visible, origin) }
+      affected
+    end
+
+    def descendents_path
+      child = Sequel.expr(visibility_path: visibility_join(visibility_path, id))
+      deep  = Sequel.like(:visibility_path, visibility_join(visibility_path, id, "%"))
+      (child | deep)
+    end
+
+    def visibility_join(*args)
+      args.join(Spontaneous::VISIBILITY_PATH_SEP)
+    end
+
+    # find descendents
+    # then all the aliases of descendents
+    # then loop back to repeat the process starting from the aliases
+    def find_descendents(visible)
+      affected = []
+      descendents = [self].concat(visibility_descendents([self], visible))
+      loop do
+        affected.concat(descendents)
+        aliases = content_aliases(descendents, visible)
+        # no need to continue if the descendents tree has no aliases to it
+        break if aliases.empty?
+        affected.concat(aliases)
+        descendents = visibility_descendents(aliases, visible)
       end
+      affected
     end
 
-    def force_visibility_cascade
-      @_visibility_modified = true
+    def content_aliases(targets, visible)
+      dataset = filter_for_visibility(content_model.filter(target_id: targets.map(&:id)), visible)
+      dataset.all
     end
 
-    def after_save
-      super
-      if @_visibility_modified
-        propagate_visibility_state
-        @_visibility_modified = false
-      end
+    def visibility_descendents(aliases, visible)
+      expr = aliases[1..-1].inject(aliases[0].descendents_path) { |q, a| q | a.descendents_path }
+      dataset = filter_for_visibility(content_model.filter(expr), visible)
+      dataset.all
     end
 
-    def propagate_visibility_state
-      hide_descendents(self.visible?)
-      hide_aliases(self.visible?)
-    end
-
-    def hide_aliases(visible)
-      dataset = content_model.filter(:target_id => self.id)
-      origin = visible ? nil : self.id
-      dataset.update(:hidden => !visible, :hidden_origin => origin)
-    end
-
-    def hide_descendents(visible)
-      path_like = Sequel.like(:visibility_path, "#{self[:visibility_path]}.#{self.id}%")
-      origin = visible ? nil : self.id
-      dataset = content_model.filter(path_like).filter(:hidden => visible)
+    def filter_for_visibility(ds, visible)
+      ds = ds.exclude(hidden: !visible)
       # if a child item has been made invisible *before* its parent then it exists
       # with hidden = true and hidden_origin = nil
-      if visible
-        dataset = dataset.filter(:hidden_origin => self.id)
-      end
-      dataset.update(:hidden => !visible, :hidden_origin => origin)
-
-      dataset.each do |content|
-        content.aliases.update(:hidden => !visible, :hidden_origin => origin)
-      end
-
-      ## I'm saving these for posterity: I worked out some Sequel magic and I don't want to lose it
-      #
-      # Spontaneous::Content.from(:content___p).filter(path_like).update(:visible => visible, :hidden_origin => origin)
-      # Spontaneous::Content.filter(:page_id => self.id).set(:visible => visible, :hidden_origin => origin)
-      ## Update with join:
-      # Spontaneous::Content.from(:content___n, :content___p).filter(path_like).filter(:n__page_id => :p__id).set(:n__visible => visible, :n__hidden_origin => origin)
-    end
-
-    def visibility_ancestors
-      visibility_ancestor_ids.map { |id| content_model[id] }
-    end
-
-    def visibility_ancestor_ids
-      return [] if visibility_path.blank?
-      visibility_path.split(Spontaneous::VISIBILITY_PATH_SEP).map(&:to_i)
+      ds = ds.filter(hidden_origin: id) if visible
+      ds
     end
 
     def recalculated_hidden
@@ -140,9 +177,7 @@ module Spontaneous::Model::Core
     end
 
     def protect_root_visibility!
-      if self.is_page? && self.is_root?
-        raise "Root page is not hidable"
-      end
+      raise "Root page is not hidable" if (is_page? && is_root?)
     end
   end
 end

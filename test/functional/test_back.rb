@@ -289,6 +289,7 @@ describe "Back" do
         box = job1.images
         field = box.fields.title
         field.version = 3
+        field.modified!
         job1.save.reload
         box = job1.images
         field = box.fields.title
@@ -300,7 +301,7 @@ describe "Back" do
         last_response.content_type.must_equal "application/json;charset=utf-8"
         result = Spontaneous.deserialise_http(last_response.body)
         result.must_equal({
-          sid.to_sym => [ field.version, field.value ]
+          sid.to_sym => [ 3, field.value ]
         })
       end
 
@@ -501,12 +502,29 @@ describe "Back" do
         auth_patch "/@spontaneous/content/#{job1.id}/toggle"
         assert last_response.ok?
         last_response.content_type.must_equal "application/json;charset=utf-8"
-        Spot::JSON.parse(last_response.body).must_equal({:id => job1.id, :hidden => true})
+        Spot::JSON.parse(last_response.body).must_equal([{id: job1.id, hidden: true}, {id: image1.id, hidden: true}])
         job1.reload.visible?.must_equal false
         auth_patch "/@spontaneous/content/#{job1.id}/toggle"
         assert last_response.ok?, "Expected status 200 but recieved #{last_response.status}"
         job1.reload.visible?.must_equal true
-        Spot::JSON.parse(last_response.body).must_equal({:id => job1.id, :hidden => false})
+        Spot::JSON.parse(last_response.body).must_equal([{id: job1.id, hidden: false}, {id: image1.id, hidden: false}])
+      end
+
+      it "returns the list of affected items when toggling visibility" do
+        job1.reload.visible?.must_equal true
+        job1_alias = LinkedJob.new(target: job1)
+        home.featured_jobs << job1_alias
+        job1_alias.save
+        auth_patch "/@spontaneous/content/#{job1.id}/toggle"
+        assert last_response.ok?
+        last_response.content_type.must_equal "application/json;charset=utf-8"
+        Spot::JSON.parse(last_response.body).must_equal([{id: job1.id, hidden: true}, {id: image1.id, hidden: true}, {id: job1_alias.id, hidden: true}])
+        job1.reload.visible?.must_equal false
+        job1_alias.reload.visible?.must_equal false
+        auth_patch "/@spontaneous/content/#{job1.id}/toggle"
+        assert last_response.ok?, "Expected status 200 but recieved #{last_response.status}"
+        job1.reload.visible?.must_equal true
+        Spot::JSON.parse(last_response.body).must_equal([{id: job1.id, hidden: false}, {id: image1.id, hidden: false}, {id: job1_alias.id, hidden: false}])
       end
 
       it "sets the position of pieces" do
@@ -518,6 +536,18 @@ describe "Back" do
 
         page = Content[home.id]
         page.in_progress.contents.first.id.must_equal job2.id
+      end
+
+      it "sets the position of pages" do
+
+        auth_patch "/@spontaneous/content/#{project3.id}/position/0"
+        assert last_response.ok?
+        last_response.content_type.must_equal "application/json;charset=utf-8"
+        home.reload
+        home.projects.contents.first.id.must_equal project3.id
+
+        page = Content[home.id]
+        page.projects.contents.first.id.must_equal project3.id
       end
 
       it "records the currently logged in user" do
@@ -841,7 +871,7 @@ describe "Back" do
       end
 
       it "be able to start a publish with a set of change sets" do
-        site.expects(:publish_pages).with([project1.id])
+        site.expects(:publish_pages).with([project1.id], instance_of(Spontaneous::Permissions::User))
         auth_post "/@spontaneous/changes", :page_ids => [project1.id]
         assert last_response.ok?, "Expected 200 recieved #{last_response.status}"
       end
@@ -856,7 +886,13 @@ describe "Back" do
       end
 
       it "recognise when the list of changes is complete" do
-        site.expects(:publish_pages).with([home.id, project1.id])
+        site.expects(:publish_pages).with([home.id, project1.id], instance_of(Spontaneous::Permissions::User))
+        auth_post "/@spontaneous/changes", :page_ids => [home.id, project1.id]
+        assert last_response.ok?, "Expected 200 recieved #{last_response.status}"
+      end
+
+      it "passes the logged in user to the publish process" do
+        site.expects(:publish_pages).with([home.id, project1.id], user)
         auth_post "/@spontaneous/changes", :page_ids => [home.id, project1.id]
         assert last_response.ok?, "Expected 200 recieved #{last_response.status}"
       end
@@ -950,6 +986,19 @@ describe "Back" do
         Spot::JSON.parse(last_response.body).first.must_equal required_response
       end
 
+      it 'adds a hidden alias if the target is hidden' do
+        home.featured_jobs.contents.length.must_equal 0
+        job = Job.first
+        job.hide!
+        auth_post "/@spontaneous/alias/#{home.id}/#{HomePage.boxes[:featured_jobs].schema_id.to_s}", 'alias_id' => LinkedJob.schema_id.to_s, 'target_ids' => job.id, "position" => 0
+        assert last_response.ok?, "Recieved #{last_response.status} not 200"
+        last_response.content_type.must_equal "application/json;charset=utf-8"
+        home.reload
+        home.featured_jobs.contents.length.must_equal 1
+        a = home.featured_jobs.first
+        assert a.hidden?
+      end
+
 
       it "interfaces with lists of non-content targets" do
         begin
@@ -985,7 +1034,7 @@ describe "Back" do
       it "return scripts from js dir" do
         get '/@spontaneous/js/test.js'
         assert last_response.ok?, "Expected a 200 but received a #{last_response.status}"
-        last_response.content_type.must_equal "application/javascript; charset=UTF-8"
+        last_response.content_type.must_equal "application/javascript;charset=UTF-8"
         # Sprockets appends sone newlines and a semicolon onto our test file
         assert_equal File.read(@app_dir / 'js/test.js') + "\n;\n", last_response.body
       end
@@ -1117,7 +1166,7 @@ describe "Back" do
       get "/assets/js/coffeescript.js"
       assert last_response.ok?, "Should return 200 but got #{last_response.status}"
       last_response.body.must_match /square = function/
-      last_response.content_type.must_equal "application/javascript; charset=UTF-8"
+      last_response.content_type.must_equal "application/javascript;charset=UTF-8"
     end
 
     it "accept POST requests" do
@@ -1228,5 +1277,3 @@ describe "Back" do
       it "redirects back to original page"
     end
 end
-
-

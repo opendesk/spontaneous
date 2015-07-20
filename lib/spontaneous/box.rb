@@ -80,6 +80,14 @@ module Spontaneous
       @owner.model
     end
 
+    def dataset
+      unordered_dataset.order(Sequel.asc(:box_position))
+    end
+
+    def unordered_dataset
+      @owner.model.where!(owner_id: @owner.id, box_sid: schema_id)
+    end
+
     # All renderable objects must implement #target to enable aliases & content objects
     # to be treated identically
     def target
@@ -135,7 +143,7 @@ module Spontaneous
     end
 
     def media_id
-      "#{owner.padded_id}/#{schema_id}"
+      "#{owner.padded_id}/#{schema_id}".freeze
     end
 
     def position
@@ -153,14 +161,19 @@ module Spontaneous
     def reload
       owner.reload
     end
+
+    def reload_box
+      mapper.clear_cache(scope_cache_key)
+      @field_store = nil
+    end
+
     # needed by Render::Context
     def box?(box_name)
       false
     end
 
-
     def field_store
-      owner.box_field_store(self) || initialize_fields
+      @field_store ||= (owner.box_field_store(self) || initialize_fields)
     end
 
     # don't like this
@@ -203,8 +216,7 @@ module Spontaneous
     end
 
     def serialize_db
-      { :box_id => schema_id.to_s,
-        :fields => serialized_fields }
+      { box_id: schema_id.to_s, fields: serialized_fields }
     end
 
     def serialized_fields
@@ -296,9 +308,7 @@ module Spontaneous
     end
 
     def adopt(content, index = -1)
-      content.parent.destroy_entry!(content)
       insert(index, content)
-      self.save
       content.save
       # kinda feel like this should be dealt with internally by the page
       # but don't care enough to start messing with the path propagation
@@ -313,16 +323,19 @@ module Spontaneous
     alias_method :<<, :push
 
     def insert(index, content)
+      owner.save if owner.new?
       @modified = true
-      @contents = nil
-      owner.insert(index, content, self)
+      inserted = contents.insert(index, content)
+      content.after_insertion
+      owner.save_after_insertion(content)
+      inserted
+    rescue RuntimeError
+      raise Spontaneous::ReadOnlyScopeModificationError.new(self)
     end
 
-    def set_position(entry, new_position)
+    def set_position(content, new_position)
       @modified = true
-      # piece = contents[new_position]
-      # new_position = owner.pieces.index(piece)
-      owner.contents.set_position(entry, new_position)
+      contents.set_position(content, new_position)
     end
 
     def modified?
@@ -334,11 +347,30 @@ module Spontaneous
     # This is designed to be fast by not requiring the actual
     # loading of the box contents.
     def ids
-      owner.contents.ids(self)
+      contents.ids
     end
 
     def contents
-      owner.contents.for_box(self)
+      mapper.with_cache(scope_cache_key) { read_only(contents!) }
+    end
+
+    def read_only(contents)
+      contents.freeze if model.visible_only?
+      contents
+    end
+
+    # If you want to over-ride a box with a custom contents array then
+    # re-define this method, not #contents above.
+    def contents!
+      Spontaneous::Collections::BoxContents.new(self)
+    end
+
+    def scope_cache_key
+      @scope_cache_key ||= ['box', owner.id, schema_id.to_s].join(':').freeze
+    end
+
+    def mapper
+      model.mapper
     end
 
     def pieces
@@ -353,10 +385,31 @@ module Spontaneous
       contents.index(entry)
     end
 
+    def wrap_page(page)
+      contents.wrap_page(page)
+    end
+
     def each
-      contents.each do |piece|
-        yield piece if block_given?
+      return enum_for(:each) unless block_given?
+      contents.each(&Proc.new)
+    end
+
+    def clear
+      clear!
+    end
+
+    def clear!
+      contents.each do |content|
+        content.destroy(false)
       end
+      contents.clear
+    end
+
+    def destroy(origin)
+      each do |content|
+        content.destroy(false, origin)
+      end
+      mapper.clear_cache(scope_cache_key)
     end
 
     def clear!
@@ -366,7 +419,7 @@ module Spontaneous
     end
 
     def empty?
-      contents.count == 0
+      contents.empty?
     end
 
     def last
@@ -383,17 +436,34 @@ module Spontaneous
       contents
     end
 
+    # An implementation of the Array#sample method
+    def sample(n = 1)
+      contents.sample(n = 1)
+    end
+
+    # An implementation of the Array#sample method that
+    # doesn't load the entire box contents
+    def sample!
+      contents.sample!
+    end
+
+    def content_destroyed(content)
+      contents.content_destroyed(content)
+    rescue RuntimeError => e
+      raise Spontaneous::ReadOnlyScopeModificationError.new(self)
+    end
+
     def export(user = nil)
       shallow_export(user).merge({
-        :entries => contents.map { |p| p.export(user) }
+        entries: contents.map { |p| p.export(user) }
       })
     end
 
     def shallow_export(user)
       {
-        :name => _prototype.name.to_s,
-        :id => _prototype.schema_id.to_s,
-        :fields => self.class.readable_fields(user).map { |name| fields[name].export(user) }
+        name: _prototype.name.to_s,
+        id: _prototype.schema_id.to_s,
+        fields: self.class.readable_fields(user).map { |name| fields[name].export(user) }
       }
     end
 
@@ -432,6 +502,29 @@ module Spontaneous
 
     def ==(obj)
       super or (obj.is_a?(Box) && (self._prototype == obj._prototype) && (self.owner == obj.owner))
+    end
+
+    def to_a
+      contents.dup
+    end
+
+    # It would seem obvious to return the same value as #to_a here but if we
+    # do that then any list of boxes that is then flattened will transform
+    # into a list of box contents, which isn't really what you’d expect
+    def to_ary
+      nil
+    end
+
+    def respond_to_missing?(method_name, include_private = false)
+      contents.respond_to?(method_name, include_private)
+    end
+
+    def method_missing(method_name, *args)
+      if block_given?
+        contents.send(method_name, *args, &Proc.new)
+      else
+        contents.send(method_name, *args)
+      end
     end
   end
 end

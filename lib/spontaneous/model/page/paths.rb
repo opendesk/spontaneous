@@ -140,7 +140,11 @@ module Spontaneous::Model::Page
     end
 
     def ancestor_path
-      (self[:ancestor_path] || "").split(Spontaneous::Model::ANCESTOR_SEP).map { |id| id.to_i }
+      self.class.split_materialised_path(self[:ancestor_path])
+    end
+
+    def ancestor_path_ids
+      self[:ancestor_path]
     end
 
     def is_public_root?

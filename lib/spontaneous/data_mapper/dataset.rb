@@ -88,9 +88,22 @@ module Spontaneous
         self
       end
 
+      def exclude(*cond, &block)
+        @dataset.exclude!(*cond, &block)
+        self
+      end
+
       def where(*cond, &block)
         @dataset.where!(*cond, &block)
         self
+      end
+
+      def map(column = nil, &block)
+        if column
+          @dataset.map(column)
+        else
+          super(&block)
+        end
       end
 
       def all
@@ -113,6 +126,7 @@ module Spontaneous
       end
 
       def each
+        return enum_for(:each) unless block_given?
         @dataset.each do |r|
           yield load_instance(r)
         end
@@ -128,8 +142,13 @@ module Spontaneous
         self
       end
 
-      def limit(l, o = (no_offset = true; nil))
+      def limit(l, o = (_no_offset = true; nil))
         @dataset.limit!(l, o)
+        self
+      end
+
+      def offset(o)
+        @dataset.offset!(o)
         self
       end
 
@@ -187,6 +206,10 @@ module Spontaneous
         @dataset.unfiltered
       end
 
+      def ds
+        @dataset
+      end
+
       alias_method :sql, :to_sql
 
       def get_raw(id)
@@ -229,6 +252,10 @@ module Spontaneous
           instance = model.new(attributes, true)
           @identity_map[instance.id] = instance
         end
+      end
+
+      def inspect
+        %(#<Spontaneous::DataMapper::Dataset:#{object_id.to_s(16)} dataset=#{@dataset.sql}>)
       end
     end
   end

@@ -86,14 +86,13 @@ describe "Alias" do
     root = ::Page.create
     aliases = ::Page.create(:slug => "aliases").reload
     root.box1 << aliases
-    a = A.create(:a_field1 => "@a.a_field1").reload
-    aa = AA.create.reload
-    aaa1 = AAA.create(:aaa_field1 => "aaa1").reload
-    aaa2 = AAA.create.reload
-    b = B.new(:slug => "b")
-    root.box1 << b
-    bb = BB.new(:slug => "bb", :bb_field1 => "BB")
-    root.box1 << bb
+    box = aliases.box1
+    a = box.push A.new(:a_field1 => "@a.a_field1")
+    aa = box.push AA.new
+    aaa1 = box.push AAA.new(:aaa_field1 => "aaa1")
+    aaa2 = box.push AAA.new
+    b = root.box1.push B.new(:slug => "b")
+    bb = root.box1.push BB.new(:slug => "bb", :bb_field1 => "BB")
     root.save.reload
 
     let(:root) { root }
@@ -233,7 +232,7 @@ describe "Alias" do
             page2.box2 << A.new
             page2.box2 << AA.new
           }
-          page2.save.reload
+          page2.reload
           container_proc = Proc.new { [site['$thepage'].box1, site['$thepage2']] }
           ::X = Class.new(::Piece) do
             alias_of :A, :AA, :container => container_proc
@@ -277,7 +276,7 @@ describe "Alias" do
           @page.box1 << AAA.create
           @page.box2 << AAA.create
           @page.save.reload
-          allowable = AAA.all - @page.box1.contents
+          allowable = AAA.all - @page.box1.contents.to_a
           ::X  = Class.new(::Piece) do
             alias_of :AAA, :filter => proc { |choice, page, box| !box.include?(choice) }
           end
@@ -384,6 +383,7 @@ describe "Alias" do
       @target = target = mock()
       @target.stubs(:id).returns(@target_id)
       @target.stubs(:title).returns("custom object")
+      @target.stubs(:hidden?).returns(false)
 
       @custom_alias_class = Class.new(::Page) do
         alias_of proc { [target] }, :lookup => lambda { |id|
@@ -533,7 +533,7 @@ describe "Alias" do
 
     it "render with locally defined style when available" do
       BAlias.layout :b_alias
-      al = BAlias.create(:target => b, :slug => "balias")
+      al = BAlias.new(:target => b, :slug => "balias")
       aliases.box1 << al
       aliases.save
       al.reload
@@ -552,12 +552,27 @@ describe "Alias" do
   end
 
   describe "visibility" do
+    after do
+      b.show!
+    end
+
     it "be linked to the target's visibility" do
       a = BAlias.create(:target => b, :slug => "balias")
       b.hide!
       b.reload
       a.reload
       refute a.visible?
+      refute a[:visible]
+    end
+
+    it 'is adopted from the target when added' do
+      b.hide!
+      a = BAlias.new(:target => b, :slug => "balias")
+      root.box1 << a
+      a.save
+      attrs = a.attributes
+      assert attrs[:hidden]
+      attrs[:hidden_origin].must_equal b.id
     end
   end
 end

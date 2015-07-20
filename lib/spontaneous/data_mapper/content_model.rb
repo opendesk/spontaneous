@@ -101,6 +101,22 @@ module Spontaneous
         mapper.dataset(types)
       end
 
+      # Allow for iterating over all instances of a type using:
+      #
+      #    Type.each { |instance| ... }
+      #
+      def each(&block)
+        dataset.each(&block)
+      end
+
+      # Allow for mapping all instances of a type using:
+      #
+      #    Type.map { |instance| ... }
+      #
+      def map(&block)
+        dataset.map(&block)
+      end
+
       def all
         mapper.all(*types)
       end
@@ -123,6 +139,14 @@ module Spontaneous
 
       def filter!(*cond, &block)
         mapper.filter!(*cond, &block)
+      end
+
+      def exclude(*cond, &block)
+        mapper.exclude(types, *cond, &block)
+      end
+
+      def exclude!(*cond, &block)
+        mapper.exclude!(*cond, &block)
       end
 
       def where(*cond, &block)
@@ -341,6 +365,12 @@ module Spontaneous
         end
 
         def eql?(obj)
+          return false if obj.nil?
+          # p [:eql?]
+          # p obj
+          # @attributes.each do |k, v|
+          #   p [k, v == obj.attributes[k]]
+          # end
           (obj.class == model) && (obj.attributes == @attributes)
         end
 

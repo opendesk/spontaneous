@@ -13,12 +13,12 @@ module Spontaneous::Publishing
       @site, @revision, @steps = site, revision, steps
     end
 
-    def publish_pages(pages)
-      publish.publish_pages(pages)
+    def publish_pages(pages, user = nil)
+      publish.publish_pages(pages, user)
     end
 
-    def publish_all
-      publish.publish_all
+    def publish_all(user = nil)
+      publish.publish_all(user)
     end
 
     def publish
@@ -27,6 +27,10 @@ module Spontaneous::Publishing
 
     def rerender
       Rerender.new(@site, @revision, @steps).rerender
+    end
+
+    def reindex
+      Reindex.new(@site, @revision, @steps).reindex
     end
   end
 end

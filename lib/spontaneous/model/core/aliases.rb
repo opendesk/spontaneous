@@ -28,7 +28,7 @@ module Spontaneous::Model::Core
         @alias_classes.each do |source|
           case source
           when Proc
-            targets.concat(source[*proc_args])
+            targets.concat(Array(source[*proc_args]))
           else
             type = source.to_s.constantize
             classes.push(type)
@@ -36,7 +36,7 @@ module Spontaneous::Model::Core
           end
         end
 
-        query = content_model.filter(:type_sid => classes.map { |c| c.schema_id })
+        query = content_model.filter(type_sid: classes.map { |c| c.schema_id })
 
         if (container_procs = @alias_options[:container])
           containers = [container_procs].flatten.map { |p| p[*proc_args] }.flatten
@@ -77,7 +77,6 @@ module Spontaneous::Model::Core
       end
 
       def target_class(class_definition)
-
       end
 
       def alias?
@@ -88,7 +87,7 @@ module Spontaneous::Model::Core
 
     module ClassAliasMethods
       def for_target(target_id)
-        self.create(:target_id => target_id)
+        new(target_id: target_id)
       end
 
       def alias?
@@ -97,7 +96,7 @@ module Spontaneous::Model::Core
 
       def use_configured_generator(generator_name, *args)
         return nil unless @alias_options.key?(generator_name)
-        (generator = @alias_options[generator_name]).call(*args)
+        (_generator = @alias_options[generator_name]).call(*args)
       end
 
       def lookup_target(target_id)
@@ -111,6 +110,13 @@ module Spontaneous::Model::Core
 
     # included only in instances that are aliases
     module AliasMethods
+      # If we're being created as an alias to a hidden target then we should be
+      # born hidden and have our visibility linked to our target.
+      def before_create
+        set_visible(false, target.hidden_origin || target.id) if target && target.hidden?
+        super
+      end
+
       def alias?
         true
       end
@@ -129,17 +135,15 @@ module Spontaneous::Model::Core
       end
 
       def respond_to_missing?(name, include_private = false)
-        return true if target && target.respond_to?(name)
-        super
+        (target && target.respond_to?(name, include_private)) || super
       end
 
       def respond_to?(name, include_private = false)
-        return true if target && target.respond_to?(name)
-        super
+        super || respond_to_missing?(name, include_private)
       end
 
       def method_missing(method, *args)
-        if target && target.respond_to?(method)
+        if respond_to_missing?(method)
           if block_given?
             target.__send__(method, *args, &Proc.new)
           else
@@ -165,7 +169,7 @@ module Spontaneous::Model::Core
       end
 
       def shallow_export(user = nil)
-        super.merge(:target => exported_target(user), :alias_title => target.alias_title, :alias_icon => target.exported_alias_icon)
+        super.merge(target: exported_target(user), alias_title: target.alias_title, alias_icon: target.exported_alias_icon)
       end
 
       def exported_target(user = nil)
@@ -178,7 +182,7 @@ module Spontaneous::Model::Core
       end
 
       def hidden?
-        super || target.nil? || (target.respond_to?(:hidden?) && target.hidden?)
+        super || target.nil?
       end
     end
 
@@ -199,10 +203,10 @@ module Spontaneous::Model::Core
       def layout
         # if this alias class has no layouts defined, then just use the one set on the target
         if self.class.layouts.empty?
-          target.resolve_layout(self.style_sid)
+          target.resolve_layout(layout_sid)
         else
           # but if it does have layouts defined, use them
-          self.resolve_layout(self.style_sid) or target.resolve_layout(self.style_sid)
+          resolve_layout(layout_sid) or target.resolve_layout(layout_sid)
         end
       end
 

@@ -8,6 +8,7 @@ require "fileutils"
 require "stringex"
 require "logger"
 
+require "active_support"
 require "active_support/concern"
 require "active_support/deprecation"
 require "active_support/time"
@@ -80,9 +81,9 @@ module Spontaneous
   end
 
   module Collections
+    autoload :BoxContents,      "spontaneous/collections/box_contents"
     autoload :BoxSet,           "spontaneous/collections/box_set"
     autoload :ChangeSet,        "spontaneous/collections/change_set"
-    autoload :EntrySet,         "spontaneous/collections/entry_set"
     autoload :FieldSet,         "spontaneous/collections/field_set"
     autoload :HashWithFallback, "spontaneous/collections/hash_with_fallback"
     autoload :PrototypeSet,     "spontaneous/collections/prototype_set"
