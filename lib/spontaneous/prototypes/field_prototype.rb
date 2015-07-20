@@ -140,7 +140,6 @@ module Spontaneous::Prototypes
       else
         default
       end
-      instance_class.make_default_value(instance, default_value)
     end
 
     def dynamic_default?
