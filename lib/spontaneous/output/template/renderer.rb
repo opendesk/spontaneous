@@ -174,6 +174,9 @@ module Spontaneous::Output::Template
         return template
       end
       # Attempt to render a published template
+      if (template = @output_store.protected_template(output))
+        return template
+      end
       if (template = @output_store.dynamic_template(output))
         return engine.render_template(template, context(output, params, parent_context), output.name)
       end
