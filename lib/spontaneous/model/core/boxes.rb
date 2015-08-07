@@ -118,5 +118,45 @@ module Spontaneous::Model::Core
     def box_style_id(box_name)
       nil
     end
+
+    def box_contents(box)
+      return [] if id.nil?
+      all_box_contents.fetch(box.schema_id, [])
+    end
+
+    def all_box_contents
+      mapper.with_cache(box_contents_scope_cache_key) { all_box_contents! }
+    end
+
+    def box_contents_scope_cache_key
+      @box_contents_scope_cache_key ||= ['boxes', id].join(':').freeze
+    end
+
+    def all_box_contents!
+      ungrouped_box_content.group_by { |content| content.box_sid }
+    end
+
+    def ungrouped_box_content
+      if mapper.use_prepared_statements?
+        box_contents_prepared_statement.call(owner_id: id)
+      else
+        box_dataset(id).all
+      end
+    end
+
+    # This prepared statement isn't re-used by all content instances because I
+    # can't figure out the correct way to prepare/call a prepared statement
+    # with an array value.
+    def box_contents_prepared_statement
+      mapper.prepare(:select, :"load_box_contents_#{schema_id}") { box_dataset(:$owner_id) }
+    end
+
+    def box_dataset(id)
+      unordered_box_dataset(id).order(Sequel.asc(:box_sid), Sequel.asc(:box_position))
+    end
+
+    def unordered_box_dataset(id)
+      model.where!(owner_id: id, box_sid: boxes.schema_ids)
+    end
   end
 end
