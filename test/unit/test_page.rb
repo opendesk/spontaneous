@@ -139,6 +139,9 @@ describe "Page" do
       @root = Page.create
       assert @root.root?
     end
+    after do
+      Content.send :remove_const, :DynamicDefault rescue nil
+    end
 
     it "be generated if missing" do
       p = @root.subs << Page.new
@@ -161,8 +164,6 @@ describe "Page" do
 
     it "be made URL safe" do
       p = @root.subs << Page.new
-      # o = Page.create
-      # p = Page.create
       p.slug = " something's illegal and ugly!!"
       p.slug.must_equal "somethings-illegal-and-ugly"
       p.save
@@ -173,8 +174,8 @@ describe "Page" do
       r = @root.subs << Page.new
       slug = Page.generate_default_slug
       Page.stubs(:generate_default_slug).returns(slug)
-      o = Page.new(title: "New Page")
-      p = Page.new(title: "New Page")
+      o = Page.new
+      p = Page.new
       r.sub << o
       o.slug.must_equal slug
       o = Page[o.id]
@@ -191,6 +192,20 @@ describe "Page" do
       o.save
       o.reload
       o.slug.must_equal "new-title"
+    end
+
+    it "isn't set from a dynamic default value" do
+      r = @root.subs << Page.new
+      slug = Page.generate_default_slug
+      Page.stubs(:generate_default_slug).returns(slug)
+      class ::DynamicDefault < Page
+        field :title, default: proc { |page| 'Really new thing' }
+      end
+      o = DynamicDefault.new
+      r.sub << o
+      o.slug.wont_equal 'really-new-thing'
+      o.slug.must_equal slug
+      o.title.value.must_equal 'Really new thing'
     end
 
     it "doesn't set a conflicting url on creation" do
@@ -228,7 +243,7 @@ describe "Page" do
       r.sub << o
       o.save
 
-      p = Page.new(title: "New Page")
+      p = Page.new
       r.sub << p
       p.save
       p.title = "My Slug"
