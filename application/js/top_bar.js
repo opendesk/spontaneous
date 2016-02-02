@@ -348,6 +348,7 @@ Spontaneous.TopBar = (function($, S) {
 			});
 		},
 		user_loaded: function(user) {
+			return;
 			if (user.can_publish()) {
 				this.disabled = false;
 				this.button().removeClass('disabled').velocity('fadeIn');
